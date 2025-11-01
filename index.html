@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Tracker - AI Study Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <circle cx="16" cy="16" r="14" stroke="url(#gradient)" stroke-width="2"/>
+                    <circle cx="16" cy="16" r="6" fill="url(#gradient)"/>
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#EC4899;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>Focus<span class="gradient-text">AI</span></h1>
+            </div>
+            <div class="header-actions">
+                <button class="eye-tracking-toggle" id="eye-tracking-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span>Start Eye Tracking</span>
+                </button>
+                <div class="user-info">
+                    <div class="status-indicator"></div>
+                    <span>Active Session</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Flashcards Section -->
+            <section class="flashcards-section">
+                <h2 class="section-title">Quick Access</h2>
+                <div class="flashcards-grid">
+                    <!-- Flashcard 1: Study Stats -->
+                    <div class="flashcard" id="stats-card">
+                        <div class="card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 3v18h18"/>
+                                <path d="M18 17V9"/>
+                                <path d="M13 17V5"/>
+                                <path d="M8 17v-3"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Study Stats</h3>
+                        <p class="card-description">Track your performance and progress</p>
+                        <div class="card-stat">
+                            <span class="stat-value">0</span>
+                            <span class="stat-label">Sessions Completed</span>
+                        </div>
+                    </div>
+
+                    <!-- Flashcard 2: Focus Tracker -->
+                    <div class="flashcard" id="focus-card">
+                        <div class="card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 1v6m0 6v6M1 12h6m6 0h6"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Focus Tracker</h3>
+                        <p class="card-description">Monitor your concentration levels</p>
+                        <div class="card-stat">
+                            <span class="stat-value">--</span>
+                            <span class="stat-label">Average Focus Score</span>
+                        </div>
+                    </div>
+
+                    <!-- Flashcard 3: Questions -->
+                    <div class="flashcard flashcard-interactive" id="questions-card">
+                        <div class="card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <line x1="10" y1="9" x2="8" y2="9"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">Questions</h3>
+                        <p class="card-description">Calculus practice problems ready</p>
+                        <div class="card-stat">
+                            <span class="stat-value" id="question-count">0</span>
+                            <span class="stat-label">Questions Available</span>
+                        </div>
+                        <button class="card-button" id="start-quiz-btn">
+                            Start Practice
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12l6-6-6-6"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat/Input Section -->
+            <section class="chat-section">
+                <div class="messages-container" id="messages">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                                <circle cx="24" cy="24" r="22" stroke="url(#gradient2)" stroke-width="2"/>
+                                <path d="M24 16v16m-8-8h16" stroke="url(#gradient2)" stroke-width="2" stroke-linecap="round"/>
+                                <defs>
+                                    <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style="stop-color:#8B5CF6;stop-opacity:1" />
+                                        <stop offset="100%" style="stop-color:#EC4899;stop-opacity:1" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                        </div>
+                        <h2>Welcome to FocusAI</h2>
+                        <p>Your intelligent study companion powered by AI. Ask me anything or start a practice session!</p>
+                        <div class="suggestions">
+                            <button class="suggestion-chip">Explain derivatives</button>
+                            <button class="suggestion-chip">Start calculus quiz</button>
+                            <button class="suggestion-chip">How can I improve focus?</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="user-input" 
+                            class="chat-input" 
+                            placeholder="Message FocusAI..."
+                            rows="1"
+                        ></textarea>
+                        <button class="send-button" id="send-btn">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M18 2L9 11M18 2L12 18L9 11M18 2L2 8L9 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="input-hint">Press Enter to send, Shift+Enter for new line</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Quiz Modal -->
+    <div class="modal" id="quiz-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Calculus Practice Quiz</h2>
+                <button class="close-modal" id="close-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="quiz-content">
+                <!-- Quiz content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Eye tracking container will be created by eye-tracker.js -->
+    
+    <script src="eye-tracker.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
