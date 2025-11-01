@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Focus Tracker - AI Study Assistant</title>
     <link rel="stylesheet" href="styles.css">
+    
+    <!-- MediaPipe for Eye Tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 </head>
 <body>
     <div class="container">
@@ -102,6 +108,29 @@
                             </svg>
                         </button>
                     </div>
+
+                    <!-- Flashcard 4: RAG Document Upload -->
+                    <div class="flashcard flashcard-interactive" id="rag-card">
+                        <div class="card-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <h3 class="card-title">RAG Generator</h3>
+                        <p class="card-description">Upload docs to generate questions</p>
+                        <div class="card-stat">
+                            <span class="stat-value" id="rag-question-count">0</span>
+                            <span class="stat-label">Generated Questions</span>
+                        </div>
+                        <button class="card-button" id="upload-doc-btn">
+                            Upload Document
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M5 12l6-6-6-6"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -166,6 +195,94 @@
             </div>
             <div class="modal-body" id="quiz-content">
                 <!-- Quiz content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- RAG Upload Modal -->
+    <div class="modal" id="rag-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>RAG Question Generator</h2>
+                <button class="close-modal" id="close-rag-modal">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" id="rag-content">
+                <div class="rag-upload-section">
+                    <div class="file-upload-area" id="file-upload-area">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                        <h3>Upload Your Document</h3>
+                        <p>Drag & drop or click to browse</p>
+                        <p class="file-types">Supported: PDF, TXT, DOCX, MD</p>
+                        <input type="file" id="file-input" accept=".pdf,.txt,.docx,.md" hidden>
+                    </div>
+                    
+                    <div class="file-info" id="file-info" style="display: none;">
+                        <div class="file-details">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            <div class="file-text">
+                                <span class="file-name" id="file-name"></span>
+                                <span class="file-size" id="file-size"></span>
+                            </div>
+                            <button class="remove-file" id="remove-file">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"/>
+                                    <line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <div class="generation-options">
+                            <label>Number of Questions:</label>
+                            <input type="range" id="question-slider" min="3" max="15" value="5" step="1">
+                            <span id="question-num">5</span>
+                        </div>
+                        
+                        <button class="generate-btn" id="generate-questions-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="7.5 4.21 12 6.81 16.5 4.21"/>
+                                <polyline points="7.5 19.79 7.5 14.6 3 12"/>
+                                <polyline points="21 12 16.5 14.6 16.5 19.79"/>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                                <line x1="12" y1="22.08" x2="12" y2="12"/>
+                            </svg>
+                            Generate Questions
+                        </button>
+                    </div>
+                    
+                    <div class="processing-status" id="processing-status" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Processing document and generating questions...</p>
+                    </div>
+                    
+                    <div class="generated-questions" id="generated-questions" style="display: none;">
+                        <h3>Generated Questions</h3>
+                        <div id="questions-list"></div>
+                        <div class="modal-actions">
+                            <button class="start-rag-quiz-btn" id="start-rag-quiz-btn">
+                                Start Practice
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M5 12l6-6-6-6"/>
+                                </svg>
+                            </button>
+                            <button class="save-questions-btn" id="save-questions-btn">
+                                Save Questions
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
