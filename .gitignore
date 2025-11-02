@@ -1,0 +1,29 @@
+# API Keys and Secrets - NEVER commit these!
+.env
+config.js
+*.key
+
+# Keep the example file
+!.env.example
+
+# API Key backup (if you create one)
+api-key.txt
+secrets.txt
+
+# Node modules (if you add npm later)
+node_modules/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Personal notes with sensitive info
+notes-private.md

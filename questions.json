@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "text": "What is the derivative of f(x) = x²?",
+    "options": [
+      "2x",
+      "x",
+      "2",
+      "x²"
+    ],
+    "correct_answer": "2x",
+    "topic": "Derivatives"
+  },
+  {
+    "id": 2,
+    "text": "What is the integral of f(x) = 2x?",
+    "options": [
+      "x² + C",
+      "2x² + C",
+      "x + C",
+      "2x + C"
+    ],
+    "correct_answer": "x² + C",
+    "topic": "Integrals"
+  },
+  {
+    "id": 3,
+    "text": "What is the limit of (x² - 4)/(x - 2) as x approaches 2?",
+    "options": [
+      "0",
+      "2",
+      "4",
+      "Does not exist"
+    ],
+    "correct_answer": "4",
+    "topic": "Limits"
+  },
+  {
+    "id": 4,
+    "text": "What is the derivative of sin(x)?",
+    "options": [
+      "cos(x)",
+      "-cos(x)",
+      "-sin(x)",
+      "tan(x)"
+    ],
+    "correct_answer": "cos(x)",
+    "topic": "Trigonometric Derivatives"
+  },
+  {
+    "id": 5,
+    "text": "What is the chain rule formula for f(g(x))?",
+    "options": [
+      "f'(x) × g'(x)",
+      "f'(g(x)) × g'(x)",
+      "f(x) × g'(x)",
+      "f'(x) + g'(x)"
+    ],
+    "correct_answer": "f'(g(x)) × g'(x)",
+    "topic": "Chain Rule"
+  },
+  {
+    "id": 6,
+    "text": "What is the derivative of e^x?",
+    "options": [
+      "e^x",
+      "xe^(x-1)",
+      "e",
+      "ln(x)"
+    ],
+    "correct_answer": "e^x",
+    "topic": "Exponential Derivatives"
+  },
+  {
+    "id": 7,
+    "text": "What is the integral of 1/x dx?",
+    "options": [
+      "ln(x) + C",
+      "ln|x| + C",
+      "1/x² + C",
+      "x ln(x) + C"
+    ],
+    "correct_answer": "ln|x| + C",
+    "topic": "Logarithmic Integration"
+  },
+  {
+    "id": 8,
+    "text": "What is the derivative of ln(x)?",
+    "options": [
+      "1/x",
+      "x",
+      "ln(x)",
+      "e^x"
+    ],
+    "correct_answer": "1/x",
+    "topic": "Logarithmic Derivatives"
+  },
+  {
+    "id": 9,
+    "text": "What is the product rule formula for f(x)g(x)?",
+    "options": [
+      "f'(x)g'(x)",
+      "f(x)g'(x) + f'(x)g(x)",
+      "f'(x)g(x)",
+      "f(x)g'(x)"
+    ],
+    "correct_answer": "f(x)g'(x) + f'(x)g(x)",
+    "topic": "Product Rule"
+  },
+  {
+    "id": 10,
+    "text": "What is the second derivative of f(x) = x³?",
+    "options": [
+      "3x²",
+      "6x",
+      "3x",
+      "x²"
+    ],
+    "correct_answer": "6x",
+    "topic": "Higher Order Derivatives"
+  }
+]

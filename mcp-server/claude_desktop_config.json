@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "quiz-context": {
+      "command": "node",
+      "args": [
+        "c:\\Users\\HEET\\OneDrive\\Documents\\hackpistolpete\\mcp-server\\src\\index.js"
+      ],
+      "env": {}
+    }
+  }
+}
