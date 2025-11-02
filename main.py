@@ -15,8 +15,12 @@ def home():
 
 @app.route("/quiz", methods=["GET"])
 def quiz():
-    quizData = json.load(open("quiz/quiz" + request.args.get("id") + ".json", "r"))
-    return render_template("/quiz.html", quizname=quizData["title"])
+    quizData = json.load(
+        open("static/quiz/quiz" + request.args.get("id") + ".json", "r")
+    )
+    return render_template(
+        "/quiz.html", quizname="Calculus Review 1", quizID=request.args.get("id")
+    )
 
 
 @app.route("/startquiz")
@@ -27,9 +31,9 @@ def startquiz():
 
 @app.route("/quiz")
 def quizProblem():
-    quizQuestion = json.load(open("quiz/quiz" + request.args.get("id") + ".json", "r"))[
-        str(request.args.get("p"))
-    ]
+    quizQuestion = json.load(
+        open("static/quiz/quiz" + request.args.get("id") + ".json", "r")
+    )[str(request.args.get("p"))]
     # string version of question
     return quizQuestion
 
@@ -39,13 +43,15 @@ def endQuiz():
     userResults = (
         request.args.get_json()
     )  # assuming i can iterate through this postdata
-    quizToConfirm = json.load(open("quiz/quiz" + request.args.get("id") + ".json", "r"))
+    quizToConfirm = json.load(
+        open("static/quiz/quiz" + request.args.get("id") + ".json", "r")
+    )
     finalScore = 100
     percentage = 100 / len(userResults)  # percent based on len for n amount
 
     # first get response
     for userResponse in userResults:
-        if userResults[0] != quizToConfirm[0]:
+        if userResponse[0] != quizToConfirm[0]:
             finalScore -= percentage
     return finalScore
 

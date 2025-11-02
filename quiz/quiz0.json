@@ -1,9 +1,0 @@
-{
-    "title": "Basic Quiz",
-    "questions": {
-        "What two plus two": {
-            "eta": 2,
-            "answer": "four"
-        }
-    }
-}
