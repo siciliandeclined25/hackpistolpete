@@ -9,6 +9,7 @@ class EyeTracker {
         this.videoElement = null;
         this.canvasElement = null;
         this.canvasCtx = null;
+        this.hasLoggedDetection = false; // For logging face detection once
         
         // Focus tracking data
         this.focusData = {
@@ -16,22 +17,24 @@ class EyeTracker {
             focusedTime: 0,
             unfocusedTime: 0,
             lookAwayCount: 0,
-            averageFocusScore: 100,
+            averageFocusScore: 0, // FIXED: Start at 0, not 100
             currentQuestionDifficulty: 'normal',
             questionFocusMap: {}, // Maps question IDs to focus scores
-            sessionStartTime: null
+            sessionStartTime: null,
+            focusFrames: 0, // NEW: Count frames where user is focused
+            totalFrames: 0  // NEW: Count total frames processed
         };
         
-        // Eye tracking parameters (IMPROVED - More strict detection)
+        // Eye tracking parameters - ADJUSTED for natural screen reading
         this.eyeThresholds = {
-            gazeDeviation: 0.08, // Reduced from 0.15 - Stricter center detection
-            gazeVerticalDeviation: 0.10, // Separate vertical threshold
+            gazeDeviation: 0.25, // INCREASED - Allow looking across screen horizontally
+            gazeVerticalDeviation: 0.35, // INCREASED - Allow looking DOWN at screen (natural reading position)
             blinkThreshold: 0.02, // Eye aspect ratio for blink detection
-            lookAwayDuration: 1000, // Reduced from 2000ms - Faster detection
+            lookAwayDuration: 2500, // INCREASED - Give more time before marking as distracted (2.5 seconds)
             minFocusForEasy: 80, // Focus score threshold for "easy" question
             minFocusForNormal: 60, // Focus score threshold for "normal" question
-            headTurnThreshold: 0.15, // Head rotation tolerance
-            consecutiveFramesRequired: 3, // Frames to confirm look away
+            headTurnThreshold: 0.25, // INCREASED - Allow natural head movements while reading
+            consecutiveFramesRequired: 5, // INCREASED - Reduce false positives (require 5 frames ~160ms)
         };
         
         // Improved tracking state
@@ -46,7 +49,7 @@ class EyeTracker {
             gazeDirection: 'center',
             headPose: 'forward',
             eyeAspectRatio: 0,
-            lastUpdateTime: Date.now()
+            lastUpdateTime: 0 // FIXED: Initialize to 0, will be set when tracking starts
         };
         
         // Question tracking
@@ -65,8 +68,8 @@ class EyeTracker {
         overlay.innerHTML = `
             <div class="eye-tracking-container">
                 <div class="camera-feed" style="display: none;">
-                    <video id="eye-tracking-video" autoplay playsinline></video>
-                    <canvas id="eye-tracking-canvas"></canvas>
+                    <video id="eye-tracking-video" autoplay playsinline width="640" height="480"></video>
+                    <canvas id="eye-tracking-canvas" width="640" height="480"></canvas>
                 </div>
                 <div class="tracking-stats" style="display: none;">
                     <div class="stat-item">
@@ -109,35 +112,57 @@ class EyeTracker {
         if (this.isTracking) return;
         
         try {
-            // Initialize MediaPipe Face Mesh
-            this.faceMesh = new FaceMesh({
-                locateFile: (file) => {
-                    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+            console.log('🎥 Starting eye tracker with TensorFlow.js...');
+            
+            // Check if TensorFlow.js is loaded
+            if (typeof faceLandmarksDetection === 'undefined') {
+                throw new Error('TensorFlow.js Face Detection not loaded. Check internet connection.');
+            }
+            
+            console.log('✅ TensorFlow.js loaded');
+            console.log('Available models:', faceLandmarksDetection.SupportedModels);
+            
+            // Load the MediaPipeFaceMesh model
+            const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+            console.log('Loading model:', model);
+            
+            this.detector = await faceLandmarksDetection.createDetector(model, {
+                runtime: 'tfjs',
+                refineLandmarks: true,
+                maxFaces: 1
+            });
+            
+            console.log('✅ Face detector initialized:', this.detector);
+            
+            // Setup video stream
+            console.log('Requesting camera access...');
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: 640,
+                    height: 480,
+                    facingMode: 'user'
                 }
             });
             
-            this.faceMesh.setOptions({
-                maxNumFaces: 1,
-                refineLandmarks: true,
-                minDetectionConfidence: 0.5,
-                minTrackingConfidence: 0.5
+            this.videoElement.srcObject = stream;
+            await this.videoElement.play();
+            
+            // Wait for video to be ready
+            await new Promise(resolve => {
+                if (this.videoElement.readyState >= 2) {
+                    resolve();
+                } else {
+                    this.videoElement.onloadeddata = () => resolve();
+                }
             });
             
-            this.faceMesh.onResults((results) => this.onResults(results));
-            
-            // Initialize camera
-            this.camera = new Camera(this.videoElement, {
-                onFrame: async () => {
-                    await this.faceMesh.send({ image: this.videoElement });
-                },
-                width: 640,
-                height: 480
-            });
-            
-            await this.camera.start();
+            console.log('✅ Camera started, video element:', this.videoElement);
+            console.log('Video dimensions:', this.videoElement.videoWidth, 'x', this.videoElement.videoHeight);
+            console.log('Video ready state:', this.videoElement.readyState);
             
             this.isTracking = true;
             this.focusData.sessionStartTime = Date.now();
+            this.currentState.lastUpdateTime = Date.now(); // FIXED: Initialize lastUpdateTime when session starts
             
             // Show minimal indicator only (overlay stays hidden during quiz)
             const indicator = document.querySelector('.tracking-active-indicator');
@@ -152,25 +177,117 @@ class EyeTracker {
                 btn.classList.add('active');
             }
             
+            // Start detection loop
+            this.detectFaces();
+            
             // Start focus monitoring
             this.startFocusMonitoring();
             
-            console.log('Eye tracking started successfully');
+            console.log('✅ Eye tracking started successfully');
             
         } catch (error) {
-            console.error('Error starting eye tracking:', error);
-            alert('Failed to start eye tracking. Please allow camera access.');
+            console.error('❌ Error starting eye tracking:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack
+            });
+            
+            let errorMsg = 'Failed to start eye tracking.\n\n';
+            
+            if (error.name === 'NotAllowedError' || error.message.includes('permission')) {
+                errorMsg += 'Camera access denied. Please allow camera access in your browser settings.';
+            } else if (typeof faceLandmarksDetection === 'undefined') {
+                errorMsg += 'TensorFlow.js libraries failed to load. Check your internet connection.';
+            } else {
+                errorMsg += 'Error: ' + error.message;
+            }
+            
+            alert(errorMsg);
         }
+    }
+    
+    async detectFaces() {
+        if (!this.isTracking) return;
+        
+        try {
+            // Check if detector exists
+            if (!this.detector) {
+                console.error('❌ Detector not initialized!');
+                return;
+            }
+            
+            // Check if video is ready
+            if (this.videoElement.readyState < 2 || this.videoElement.videoWidth === 0) {
+                console.warn('⏳ Video not ready yet, skipping frame...');
+                requestAnimationFrame(() => this.detectFaces());
+                return;
+            }
+            
+            const faces = await this.detector.estimateFaces(this.videoElement, {
+                flipHorizontal: false
+            });
+            
+            // Log detection results occasionally
+            if (Math.random() < 0.05) { // 5% of frames
+                console.log('🔍 Detection result:', faces?.length || 0, 'faces found');
+            }
+            
+            // Clear canvas
+            this.canvasCtx.save();
+            this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+            
+            if (faces && faces.length > 0) {
+                const face = faces[0];
+                const landmarks = face.keypoints;
+                
+                // Only log once to avoid spam
+                if (!this.hasLoggedDetection) {
+                    console.log('✅ Face detected! Eye tracking active.');
+                    console.log('Landmarks count:', landmarks.length);
+                    this.hasLoggedDetection = true;
+                }
+                
+                // Convert TensorFlow format to normalized coordinates (0-1 range)
+                const videoWidth = this.videoElement.videoWidth;
+                const videoHeight = this.videoElement.videoHeight;
+                const landmarksArray = landmarks.map(p => ({ 
+                    x: p.x / videoWidth, 
+                    y: p.y / videoHeight, 
+                    z: p.z || 0 
+                }));
+                
+                // Analyze
+                this.analyzeEyes(landmarksArray);
+                this.analyzeHeadPose(landmarksArray);
+                this.updateFocusState();
+            } else {
+                if (this.hasLoggedDetection) {
+                    console.log('⚠️ No face detected');
+                    this.hasLoggedDetection = false;
+                }
+                this.handleNoFaceDetected();
+            }
+            
+            this.canvasCtx.restore();
+            this.updateUI();
+            
+        } catch (error) {
+            console.error('❌ Detection error:', error);
+        }
+        
+        // Continue detection loop
+        requestAnimationFrame(() => this.detectFaces());
     }
     
     stop() {
         if (!this.isTracking) return;
         
-        if (this.camera) {
-            this.camera.stop();
-        }
-        
         this.isTracking = false;
+        
+        // Stop video stream
+        if (this.videoElement.srcObject) {
+            this.videoElement.srcObject.getTracks().forEach(track => track.stop());
+        }
         
         // Hide indicator
         const indicator = document.querySelector('.tracking-active-indicator');
@@ -190,29 +307,8 @@ class EyeTracker {
     }
     
     onResults(results) {
-        // Clear canvas
-        this.canvasCtx.save();
-        this.canvasCtx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
-        
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-            const landmarks = results.multiFaceLandmarks[0];
-            
-            // Draw face mesh (optional, for debugging)
-            this.drawFaceMesh(landmarks);
-            
-            // Analyze eye tracking
-            this.analyzeEyes(landmarks);
-            this.analyzeHeadPose(landmarks);
-            this.updateFocusState();
-        } else {
-            // No face detected - user not in frame
-            this.handleNoFaceDetected();
-        }
-        
-        this.canvasCtx.restore();
-        
-        // Update UI
-        this.updateUI();
+        // This method is now replaced by detectFaces()
+        // Keeping for compatibility but not used
     }
     
     drawFaceMesh(landmarks) {
@@ -258,15 +354,25 @@ class EyeTracker {
         this.currentState.eyeAspectRatio = avgEAR;
         this.currentState.isBlinking = avgEAR < this.eyeThresholds.blinkThreshold;
         
-        // Calculate gaze direction
+        // Calculate gaze direction (SCREEN-RELATIVE)
         const gazeVector = this.calculateGazeDirection(landmarks);
         this.currentState.gazeDirection = gazeVector.direction;
         
         // Check head pose (returns false if head turned away)
         const headFacingForward = this.analyzeHeadPose(landmarks);
         
-        // IMPROVED: Combined check - gaze + head pose
-        const isLookingAtScreen = this.isGazeFocused(gazeVector) && headFacingForward && !this.currentState.isBlinking;
+        // SCREEN-AWARE: Check if looking at screen
+        const isLookingAtScreen = gazeVector.lookingAtScreen && headFacingForward && !this.currentState.isBlinking;
+        
+        // Debug logging (occasionally)
+        if (Math.random() < 0.02) {
+            console.log('👁️ Gaze analysis:', {
+                lookingAtScreen: isLookingAtScreen,
+                horizontal: gazeVector.horizontal.toFixed(3),
+                vertical: gazeVector.vertical.toFixed(3),
+                direction: gazeVector.direction
+            });
+        }
         
         // IMPROVED: Use consecutive frames to prevent false positives
         if (!isLookingAtScreen) {
@@ -303,49 +409,63 @@ class EyeTracker {
     }
     
     calculateGazeDirection(landmarks) {
-        // IMPROVED: Use iris landmarks with better normalization
+        // SCREEN-RELATIVE GAZE: Recognize that screen is BELOW camera
         const leftIris = landmarks[468]; // Left iris center
         const rightIris = landmarks[473]; // Right iris center
         const noseTip = landmarks[1];
         const leftEyeOuter = landmarks[33];
         const rightEyeOuter = landmarks[263];
+        const leftEyeInner = landmarks[133];
+        const rightEyeInner = landmarks[362];
         
         // Normalize by eye width for better accuracy
         const eyeWidth = this.getDistance(leftEyeOuter, rightEyeOuter);
+        const eyeCenterY = (leftEyeOuter.y + rightEyeOuter.y) / 2;
         
-        // Calculate deviation from center (normalized)
-        const leftDeviation = (leftIris.x - noseTip.x) / eyeWidth;
-        const rightDeviation = (rightIris.x - noseTip.x) / eyeWidth;
-        const avgDeviation = (leftDeviation + rightDeviation) / 2;
+        // Calculate horizontal deviation from center
+        const leftDeviation = (leftIris.x - leftEyeInner.x) / eyeWidth;
+        const rightDeviation = (rightIris.x - rightEyeInner.x) / eyeWidth;
+        const avgHorizontal = (leftDeviation + rightDeviation) / 2;
         
-        // Vertical gaze (normalized)
-        const verticalGaze = ((leftIris.y + rightIris.y) / 2 - noseTip.y) / eyeWidth;
+        // Calculate vertical gaze RELATIVE TO EYES (not nose)
+        // Positive = looking DOWN at screen, Negative = looking UP away from screen
+        const avgIrisY = (leftIris.y + rightIris.y) / 2;
+        const verticalGaze = (avgIrisY - eyeCenterY) / eyeWidth;
         
-        // STRICTER: Determine direction with separate thresholds
+        // SCREEN-AWARE THRESHOLDS
+        // When looking at screen: eyes look DOWN (positive vertical) and CENTERED (low horizontal)
+        const lookingAtScreen = 
+            Math.abs(avgHorizontal) < this.eyeThresholds.gazeDeviation && // Centered horizontally
+            verticalGaze > -0.1 && // Not looking up (away from screen)
+            verticalGaze < this.eyeThresholds.gazeVerticalDeviation; // Not looking too far down
+        
+        // Determine direction
         let direction = 'center';
-        const absHorizontal = Math.abs(avgDeviation);
-        const absVertical = Math.abs(verticalGaze);
+        const absHorizontal = Math.abs(avgHorizontal);
         
-        if (absHorizontal > this.eyeThresholds.gazeDeviation) {
-            direction = avgDeviation > 0 ? 'right' : 'left';
-        } else if (absVertical > this.eyeThresholds.gazeVerticalDeviation) {
-            direction = verticalGaze > 0 ? 'down' : 'up';
+        if (!lookingAtScreen) {
+            if (absHorizontal > this.eyeThresholds.gazeDeviation) {
+                direction = avgHorizontal > 0 ? 'right' : 'left';
+            } else if (verticalGaze < -0.1) {
+                direction = 'up'; // Looking away from screen (upward)
+            } else if (verticalGaze > this.eyeThresholds.gazeVerticalDeviation) {
+                direction = 'down'; // Looking too far down (lap/phone)
+            }
         }
         
         return {
             direction,
-            horizontal: avgDeviation,
+            horizontal: avgHorizontal,
             vertical: verticalGaze,
-            magnitude: Math.sqrt(avgDeviation * avgDeviation + verticalGaze * verticalGaze),
-            isStrict: absHorizontal > this.eyeThresholds.gazeDeviation || absVertical > this.eyeThresholds.gazeVerticalDeviation
+            magnitude: Math.sqrt(avgHorizontal * avgHorizontal + verticalGaze * verticalGaze),
+            lookingAtScreen: lookingAtScreen,
+            isStrict: !lookingAtScreen
         };
     }
     
     isGazeFocused(gazeVector) {
-        // IMPROVED: Stricter focus detection with separate axis checks
-        const horizontalOK = Math.abs(gazeVector.horizontal) < this.eyeThresholds.gazeDeviation;
-        const verticalOK = Math.abs(gazeVector.vertical) < this.eyeThresholds.gazeVerticalDeviation;
-        return horizontalOK && verticalOK;
+        // SIMPLIFIED: Use the screen-aware detection from calculateGazeDirection
+        return gazeVector.lookingAtScreen;
     }
     
     analyzeHeadPose(landmarks) {
@@ -388,8 +508,8 @@ class EyeTracker {
     
     updateFocusState() {
         const now = Date.now();
-        const timeDelta = now - this.currentState.lastUpdateTime;
-        this.currentState.lastUpdateTime = now;
+        
+        // Don't reset lastUpdateTime yet - calculateRealFocusMetrics needs it!
         
         // Check if user looked away for too long
         if (this.currentState.lookAwayStartTime) {
@@ -401,24 +521,19 @@ class EyeTracker {
                     this.focusData.lookAwayCount++;
                     this.onLookAway();
                 }
-                this.focusData.unfocusedTime += timeDelta;
             }
         } else {
             if (!this.currentState.isFocused) {
                 this.currentState.isFocused = true;
                 this.onReturnFocus();
             }
-            this.focusData.focusedTime += timeDelta;
         }
         
-        this.focusData.totalTime += timeDelta;
+        // Calculate focus score based on actual session time
+        this.calculateRealFocusMetrics();
         
-        // Calculate focus score
-        if (this.focusData.totalTime > 0) {
-            this.focusData.averageFocusScore = Math.round(
-                (this.focusData.focusedTime / this.focusData.totalTime) * 100
-            );
-        }
+        // NOW update lastUpdateTime AFTER calculateRealFocusMetrics
+        this.currentState.lastUpdateTime = now;
         
         // Track question-specific focus
         if (this.currentQuestion) {
@@ -430,11 +545,76 @@ class EyeTracker {
         }
     }
     
+    calculateRealFocusMetrics() {
+        // IMPROVED: Use frame-based ratio instead of time accumulation
+        if (!this.focusData.sessionStartTime) {
+            return {
+                totalTime: 0,
+                focusedTime: 0,
+                unfocusedTime: 0,
+                focusScore: 0
+            };
+        }
+        
+        const now = Date.now();
+        const actualTotalTime = now - this.focusData.sessionStartTime;
+        this.focusData.totalTime = actualTotalTime;
+        
+        // Increment frame counters
+        this.focusData.totalFrames++;
+        if (this.currentState.isFocused && !this.currentState.lookAwayStartTime) {
+            this.focusData.focusFrames++;
+        }
+        
+        // Calculate focus score based on FRAME RATIO (more accurate)
+        // This gives us the percentage of frames where user was focused
+        if (this.focusData.totalFrames > 30) { // After ~1 second at 30fps
+            this.focusData.averageFocusScore = Math.round(
+                (this.focusData.focusFrames / this.focusData.totalFrames) * 100
+            );
+        } else {
+            this.focusData.averageFocusScore = 0; // Not enough data yet
+        }
+        
+        // Calculate estimated focused time from frame ratio
+        this.focusData.focusedTime = (this.focusData.focusFrames / Math.max(1, this.focusData.totalFrames)) * actualTotalTime;
+        this.focusData.unfocusedTime = actualTotalTime - this.focusData.focusedTime;
+        
+        // Debug logging (only every 30 frames to reduce spam)
+        if (this.focusData.totalFrames % 90 === 0) {
+            console.log('📊 Focus metrics:', {
+                focusScore: this.focusData.averageFocusScore + '%',
+                focusFrames: this.focusData.focusFrames,
+                totalFrames: this.focusData.totalFrames,
+                ratio: (this.focusData.focusFrames / this.focusData.totalFrames).toFixed(2)
+            });
+        }
+        
+        // Return metrics
+        return {
+            totalTime: this.focusData.totalTime,
+            focusedTime: this.focusData.focusedTime,
+            unfocusedTime: this.focusData.unfocusedTime,
+            focusScore: this.focusData.averageFocusScore
+        };
+    }
+    
     handleNoFaceDetected() {
-        // Treat as unfocused
-        if (this.currentState.isFocused) {
+        // NO FACE DETECTED = DEFINITELY UNFOCUSED
+        // Mark as looking away immediately
+        if (!this.currentState.lookAwayStartTime) {
             this.currentState.lookAwayStartTime = Date.now();
         }
+        
+        // Force unfocused state
+        if (this.currentState.isFocused) {
+            this.currentState.isFocused = false;
+            this.focusData.lookAwayCount++;
+            console.log('⚠️ No face detected - marking as unfocused');
+        }
+        
+        // Set gaze to "away"
+        this.currentState.gazeDirection = 'away';
     }
     
     startFocusMonitoring() {
@@ -553,11 +733,20 @@ class EyeTracker {
     }
     
     updateUI() {
+        // DON'T call calculateRealFocusMetrics here - it's already called in updateFocusState()
+        
         // Update focus score
         const scoreEl = document.getElementById('focus-score');
         if (scoreEl) {
-            scoreEl.textContent = `${this.focusData.averageFocusScore}%`;
+            scoreEl.textContent = `${Math.round(this.focusData.averageFocusScore)}%`;
             scoreEl.className = 'stat-value ' + this.getFocusScoreClass(this.focusData.averageFocusScore);
+        }
+        
+        // Update focused time
+        const timeEl = document.getElementById('focused-time');
+        if (timeEl) {
+            const seconds = Math.round(this.focusData.focusedTime / 1000);
+            timeEl.textContent = `${seconds}s`;
         }
         
         // Update status
@@ -595,31 +784,28 @@ class EyeTracker {
     }
     
     updateStatsCard() {
-        // Update the stats flashcard with focus data
-        const statsCard = document.getElementById('stats-card');
-        if (statsCard && this.isTracking) {
-            const statValue = statsCard.querySelector('.stat-value');
-            if (statValue) {
-                statValue.textContent = `${this.focusData.averageFocusScore}%`;
-            }
-            const statLabel = statsCard.querySelector('.stat-label');
-            if (statLabel) {
-                statLabel.textContent = 'Focus Score';
-            }
+        // Update the focus score and time on the Focus Tracker card
+        const scoreEl = document.getElementById('focus-score');
+        const timeEl = document.getElementById('focused-time');
+        
+        // DON'T call calculateRealFocusMetrics here - use existing data from updateFocusState()
+        
+        if (scoreEl && this.isTracking) {
+            scoreEl.textContent = `${Math.round(this.focusData.averageFocusScore)}%`;
         }
         
-        // Update focus card
-        const focusCard = document.getElementById('focus-card');
-        if (focusCard && this.isTracking) {
-            const statValue = focusCard.querySelector('.stat-value');
-            if (statValue) {
-                const focusTime = Math.round(this.focusData.focusedTime / 1000);
-                statValue.textContent = `${focusTime}s`;
-            }
-            const statLabel = focusCard.querySelector('.stat-label');
-            if (statLabel) {
-                statLabel.textContent = 'Focused Time';
-            }
+        if (timeEl && this.isTracking) {
+            const focusTime = Math.round(this.focusData.focusedTime / 1000);
+            timeEl.textContent = `${focusTime}s`;
+        }
+        
+        // Log stats update (only occasionally to avoid console spam)
+        const focusTimeSec = Math.round(this.focusData.focusedTime / 1000);
+        if (focusTimeSec % 5 === 0 && focusTimeSec > 0) {
+            console.log('📊 Stats updated:', {
+                focusScore: Math.round(this.focusData.averageFocusScore) + '%',
+                focusedTime: focusTimeSec + 's'
+            });
         }
     }
     
@@ -640,22 +826,62 @@ class EyeTracker {
 // Global instance
 let eyeTracker = null;
 
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    eyeTracker = new EyeTracker();
-    
-    // Setup button handler
-    const eyeTrackingBtn = document.getElementById('eye-tracking-btn');
-    if (eyeTrackingBtn) {
-        eyeTrackingBtn.addEventListener('click', () => {
-            if (eyeTracker.isTracking) {
-                eyeTracker.stop();
-            } else {
-                eyeTracker.start();
-            }
-        });
+// Initialize immediately - don't wait for DOMContentLoaded
+(function initEyeTracker() {
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupEyeTracker);
+    } else {
+        setupEyeTracker();
     }
-});
+})();
 
-// Export for use in other scripts
-window.eyeTracker = eyeTracker;
+function setupEyeTracker() {
+    console.log('🔧 Initializing Eye Tracker...');
+    
+    try {
+        eyeTracker = new EyeTracker();
+        window.eyeTracker = eyeTracker;
+        console.log('✅ Eye Tracker initialized successfully');
+        
+        // Setup button handler
+        const eyeTrackingBtn = document.getElementById('eye-tracking-btn');
+        if (eyeTrackingBtn) {
+            eyeTrackingBtn.addEventListener('click', () => {
+                if (eyeTracker.isTracking) {
+                    eyeTracker.stop();
+                } else {
+                    eyeTracker.start();
+                }
+            });
+            console.log('✅ Eye tracking button handler attached');
+        } else {
+            console.warn('⚠️ Eye tracking button not found');
+        }
+        
+        // Add diagnostic function to window
+        window.testEyeTracking = function() {
+            console.log('🔍 Running diagnostics...');
+            console.log('MediaPipe FaceMesh loaded:', typeof FaceMesh !== 'undefined');
+            console.log('MediaPipe Camera loaded:', typeof Camera !== 'undefined');
+            console.log('Eye tracker instance:', eyeTracker !== null);
+            console.log('Is tracking:', eyeTracker?.isTracking);
+            console.log('Video element:', eyeTracker?.videoElement);
+            console.log('Canvas element:', eyeTracker?.canvasElement);
+            
+            if (typeof FaceMesh === 'undefined') {
+                console.error('❌ FaceMesh not loaded! Check internet connection.');
+            }
+            if (typeof Camera === 'undefined') {
+                console.error('❌ Camera not loaded! Check internet connection.');
+            }
+            
+            console.log('✅ Diagnostics complete. Check messages above.');
+        };
+        
+        console.log('💡 Type testEyeTracking() in console to run diagnostics');
+        
+    } catch (error) {
+        console.error('❌ Failed to initialize Eye Tracker:', error);
+    }
+}

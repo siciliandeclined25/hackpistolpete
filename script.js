@@ -39,7 +39,7 @@ async function sendContextToMCP(endpoint, data) {
     }
 }
 
-// Get formatted analytics for AI tutor
+// Get formatted analytics for BrahmaGupta
 function getQuizAnalytics() {
     const analytics = {
         totalQuestions: quizAnalytics.questionTimes.length,
@@ -212,7 +212,9 @@ function openQuizModal() {
         topicPerformance: {}
     };
     localStorage.setItem('quizAnalytics', JSON.stringify(quizAnalytics));
-    console.log('🔄 Analytics cleared for new quiz');
+    // Also clear last quiz analytics so we start completely fresh
+    localStorage.removeItem('lastQuizAnalytics');
+    console.log('🔄 Analytics cleared for new quiz (including lastQuizAnalytics)');
     
     const modal = document.getElementById('quiz-modal');
     modal.classList.add('active');
@@ -222,6 +224,14 @@ function openQuizModal() {
     if (window.eyeTracker) {
         window.eyeTracker.start();
         console.log('Eye tracking auto-started with quiz');
+        
+        // Update camera button state
+        const cameraBtn = document.getElementById('camera-toggle-btn');
+        if (cameraBtn) {
+            cameraBtn.classList.remove('camera-off');
+            const statusText = document.getElementById('camera-status');
+            if (statusText) statusText.textContent = 'Camera On';
+        }
     }
     
     // Auto-initialize Gemini voice assistant when quiz starts
@@ -241,10 +251,40 @@ function closeQuizModal() {
     const modal = document.getElementById('quiz-modal');
     modal.classList.remove('active');
     
+    // Clear the AI Tutor's question context when quiz closes
+    if (window.geminiAssistant) {
+        window.geminiAssistant.updateQuizContext(null);
+        console.log('🧹 Cleared AI Tutor question context');
+    }
+    
     // Auto-stop eye tracking when quiz closes
     if (window.eyeTracker && window.eyeTracker.isTracking) {
         window.eyeTracker.stop();
         console.log('Eye tracking auto-stopped with quiz close');
+    }
+}
+
+// Toggle camera (eye tracking) on/off
+function toggleCamera() {
+    const btn = document.getElementById('camera-toggle-btn');
+    const statusText = document.getElementById('camera-status');
+    const cameraOnIcon = btn.querySelector('.camera-on-icon');
+    const cameraOffIcon = btn.querySelector('.camera-off-icon');
+    
+    if (window.eyeTracker && window.eyeTracker.isTracking) {
+        // Stop eye tracking
+        window.eyeTracker.stop();
+        btn.classList.add('camera-off');
+        statusText.textContent = 'Camera Off';
+        console.log('📷 Eye tracking disabled by user');
+    } else {
+        // Start eye tracking
+        if (window.eyeTracker) {
+            window.eyeTracker.start();
+            btn.classList.remove('camera-off');
+            statusText.textContent = 'Camera On';
+            console.log('📷 Eye tracking enabled by user');
+        }
     }
 }
 
@@ -330,6 +370,16 @@ function displayQuestion() {
                 </button>
             </div>
         `;
+        
+        // IMPORTANT: Save analytics to lastQuizAnalytics BEFORE clearing
+        // This ensures BrahmaGupta can access the completed quiz data
+        localStorage.setItem('lastQuizAnalytics', JSON.stringify(quizAnalytics));
+        console.log('💾 Saved completed quiz analytics to lastQuizAnalytics:', quizAnalytics);
+        
+        // Clear current quiz analytics to prevent accumulation across quiz sessions
+        localStorage.removeItem('quizAnalytics');
+        console.log('🗑️ Cleared quizAnalytics from localStorage to prevent accumulation');
+        
         return;
     }
     
@@ -520,19 +570,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load questions
     loadQuestions();
     
-    // Send button
+    // Send button - only if it exists (removed in new design)
     const sendBtn = document.getElementById('send-btn');
-    sendBtn.addEventListener('click', handleUserInput);
+    if (sendBtn) {
+        sendBtn.addEventListener('click', handleUserInput);
+    }
     
-    // Input field
+    // Input field - only if it exists (removed in new design)
     const input = document.getElementById('user-input');
-    input.addEventListener('input', (e) => autoResizeTextarea(e.target));
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleUserInput();
-        }
-    });
+    if (input) {
+        input.addEventListener('input', (e) => autoResizeTextarea(e.target));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleUserInput();
+            }
+        });
+    }
     
     // Questions card click
     const questionsCard = document.getElementById('questions-card');
@@ -556,6 +610,12 @@ document.addEventListener('DOMContentLoaded', () => {
             closeQuizModal();
         }
     });
+    
+    // Camera Toggle Button Event Listener
+    const cameraToggleBtn = document.getElementById('camera-toggle-btn');
+    if (cameraToggleBtn) {
+        cameraToggleBtn.addEventListener('click', toggleCamera);
+    }
     
     // Suggestion chips
     document.addEventListener('click', handleSuggestionClick);
@@ -1575,3 +1635,179 @@ if (typeof GeminiVoiceAssistant !== 'undefined') {
 } else {
     console.warn('⚠️ GeminiVoiceAssistant class not found');
 }
+
+// ===== COMMUNITY QUIZ FUNCTIONALITY =====
+
+function openCommunityQuizModal() {
+    const modal = document.getElementById('community-quiz-modal');
+    modal.classList.add('active');
+}
+
+function closeCommunityQuizModal() {
+    const modal = document.getElementById('community-quiz-modal');
+    modal.classList.remove('active');
+}
+
+// Make functions globally accessible
+window.openCommunityQuizModal = openCommunityQuizModal;
+window.closeCommunityQuizModal = closeCommunityQuizModal;
+window.toggleCamera = toggleCamera;
+
+// Dataset imports - simulated datasets (in production, these would fetch from a server)
+const communityDatasets = {
+    calculus1: [
+        {
+            text: "What is the limit of (x² - 4)/(x - 2) as x approaches 2?",
+            options: ["4", "2", "0", "Undefined"],
+            correct_answer: "4",
+            topic: "Limits"
+        },
+        {
+            text: "What is the derivative of f(x) = 3x² + 2x - 1?",
+            options: ["6x + 2", "3x + 2", "6x - 1", "3x² + 2"],
+            correct_answer: "6x + 2",
+            topic: "Derivatives"
+        },
+        {
+            text: "What is ∫(2x + 3)dx?",
+            options: ["x² + 3x + C", "2x² + 3x + C", "x² + 3 + C", "2x + 3x + C"],
+            correct_answer: "x² + 3x + C",
+            topic: "Integration"
+        }
+    ],
+    calculus2: [
+        {
+            text: "What is the Taylor series expansion of e^x around x = 0?",
+            options: ["∑(x^n/n!)", "∑(x^n)", "∑(n*x^n)", "∑(x^n/2^n)"],
+            correct_answer: "∑(x^n/n!)",
+            topic: "Series"
+        },
+        {
+            text: "Evaluate ∫x*e^x dx using integration by parts",
+            options: ["e^x(x-1) + C", "x*e^x + C", "e^x(x+1) + C", "x*e^x - e^x + C"],
+            correct_answer: "e^x(x-1) + C",
+            topic: "Integration Techniques"
+        }
+    ],
+    linearalgebra: [
+        {
+            text: "What is the determinant of [[2,3],[1,4]]?",
+            options: ["5", "8", "11", "2"],
+            correct_answer: "5",
+            topic: "Determinants"
+        },
+        {
+            text: "If A is a 3×2 matrix and B is a 2×4 matrix, what is the size of AB?",
+            options: ["3×4", "2×2", "3×2", "Cannot multiply"],
+            correct_answer: "3×4",
+            topic: "Matrix Operations"
+        }
+    ],
+    physics: [
+        {
+            text: "What is Newton's second law of motion?",
+            options: ["F = ma", "E = mc²", "p = mv", "W = Fd"],
+            correct_answer: "F = ma",
+            topic: "Mechanics"
+        },
+        {
+            text: "What is the unit of electrical resistance?",
+            options: ["Ohm", "Volt", "Ampere", "Watt"],
+            correct_answer: "Ohm",
+            topic: "Electricity"
+        }
+    ],
+    chemistry: [
+        {
+            text: "What is the atomic number of Carbon?",
+            options: ["6", "12", "8", "14"],
+            correct_answer: "6",
+            topic: "Atomic Structure"
+        },
+        {
+            text: "What type of bond forms when electrons are shared between atoms?",
+            options: ["Covalent", "Ionic", "Metallic", "Hydrogen"],
+            correct_answer: "Covalent",
+            topic: "Chemical Bonding"
+        }
+    ],
+    statistics: [
+        {
+            text: "What is the mean of the dataset: 2, 4, 6, 8, 10?",
+            options: ["6", "5", "7", "8"],
+            correct_answer: "6",
+            topic: "Descriptive Statistics"
+        },
+        {
+            text: "In a normal distribution, approximately what percentage of data falls within one standard deviation of the mean?",
+            options: ["68%", "95%", "99%", "50%"],
+            correct_answer: "68%",
+            topic: "Probability Distributions"
+        }
+    ]
+};
+
+async function importDataset(datasetName) {
+    console.log('📥 Importing dataset:', datasetName);
+    
+    if (!communityDatasets[datasetName]) {
+        alert('Dataset not found!');
+        return;
+    }
+    
+    const dataset = communityDatasets[datasetName];
+    
+    // Show confirmation
+    const confirmed = confirm(`Import ${dataset.length} questions from ${datasetName.toUpperCase()} dataset?\n\nThis will replace your current quiz questions.`);
+    
+    if (!confirmed) return;
+    
+    // Import the dataset
+    questions = dataset.map((q, index) => ({
+        id: `community_${datasetName}_${index}`,
+        text: q.text,
+        options: q.options,
+        correct_answer: q.correct_answer,
+        topic: q.topic,
+        source: `Community - ${datasetName}`
+    }));
+    
+    // Update question count
+    updateQuestionCount();
+    
+    // Close modal
+    closeCommunityQuizModal();
+    
+    // Show success message
+    alert(`✅ Successfully imported ${dataset.length} questions from ${datasetName.toUpperCase()}!\n\nClick "Start Practice" to begin the quiz.`);
+    
+    console.log('✅ Dataset imported:', questions);
+}
+
+// Make globally accessible
+window.importDataset = importDataset;
+
+// Initialize Community Quiz modal event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const closeBtn = document.getElementById('close-community-modal');
+    const modal = document.getElementById('community-quiz-modal');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeCommunityQuizModal);
+    }
+    
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeCommunityQuizModal();
+            }
+        });
+    }
+    
+    // Escape key to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeCommunityQuizModal();
+        }
+    });
+});
